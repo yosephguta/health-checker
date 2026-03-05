@@ -1,0 +1,40 @@
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "properties": {
+        "title": "ALB Request Count",
+        "region": "us-east-1",
+        "annotations": {"horizontal": []},
+        "metrics": [["AWS/ApplicationELB", "RequestCount", "LoadBalancer", "app/health-checker-staging-alb/2e87e29174614b03"]],
+        "period": 60,
+        "stat": "Sum",
+        "view": "timeSeries"
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "title": "ALB 5xx Errors",
+        "region": "us-east-1",
+        "annotations": {"horizontal": []},
+        "metrics": [["AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", "LoadBalancer", "app/health-checker-staging-alb/2e87e29174614b03"]],
+        "period": 60,
+        "stat": "Sum",
+        "view": "timeSeries"
+      }
+    },
+    {
+      "type": "metric",
+      "properties": {
+        "title": "ECS CPU Utilization",
+        "region": "us-east-1",
+        "annotations": {"horizontal": []},
+        "metrics": [["AWS/ECS", "CPUUtilization", "ClusterName", "health-checker-staging-cluster", "ServiceName", "health-checker-staging-service"]],
+        "period": 60,
+        "stat": "Average",
+        "view": "timeSeries"
+      }
+    }
+  ]
+}

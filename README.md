@@ -102,6 +102,8 @@ Used for monitoring container logs and observing service health.
 
 The CI/CD pipeline automatically moves code from commit to deployment.
 
+![alt text](Capture.PNG)
+
 ### 1. Pull Request
 
 When a PR is opened to `main`:
@@ -202,6 +204,8 @@ Terraform provisions:
 ---
 
 # Monitoring
+
+![alt text](Capture2.PNG)
 
 Application logs are sent to **CloudWatch Logs** from the ECS container.
 
