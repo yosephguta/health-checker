@@ -1,0 +1,105 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: health-checker
+  ECS_CLUSTER: health-checker-staging-cluster
+  ECS_SERVICE: health-checker-staging-service
+  CONTAINER_NAME: api
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        id: build
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:sha-${{ github.sha }}
+          docker build -t $IMAGE .
+          docker push $IMAGE
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials again
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition health-checker-staging-task \
+            --query taskDefinition > task-def.json
+
+      - name: Render new task definition
+        id: render-task
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ needs.build-and-push.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-task.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+  smoke-test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Smoke test
+        run: |
+          ALB_DNS="health-checker-staging-alb-189381685.us-east-1.elb.amazonaws.com"
+          URL="http://${ALB_DNS}/health"
+
+          echo "Hitting health endpoint: $URL"
+
+          # Meaningful health check:
+          # 1) Ensure we get HTTP 200 (-f)
+          # 2) Ensure response body contains expected keys/values (basic contract check)
+          BODY=$(curl -fsS "$URL")
+
+          echo "Response body: $BODY"
+
+          # Assert it looks like our API (not just "some 200")
+          echo "$BODY" | grep -q '"status"' || (echo "Missing status in /health response" && exit 1)
+          echo "$BODY" | grep -q '"healthy"' || (echo "Expected status=healthy" && exit 1)
